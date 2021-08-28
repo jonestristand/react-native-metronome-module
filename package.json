@@ -1,6 +1,6 @@
 {
   "name": "react-native-metronome-module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Cross-platform metronome module for iOS and Android",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
@@ -27,7 +27,6 @@
     "lint": "eslint \"**/*.{js,ts,tsx}\"",
     "prepare": "bob build",
     "release": "release-it",
-    "example": "yarn --cwd example",
     "pods": "cd example && pod-install --quiet",
     "bootstrap": "yarn example && yarn && yarn pods"
   },
@@ -69,7 +68,8 @@
   },
   "peerDependencies": {
     "react": "*",
-    "react-native": "*"
+    "react-native": "*",
+    "react-native-swift": "^1.2.3"
   },
   "jest": {
     "preset": "react-native",
@@ -149,5 +149,7 @@
         }
       ]
     ]
+  },
+  "dependencies": {
   }
 }

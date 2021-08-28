@@ -15,7 +15,6 @@ import MetronomeModule from "react-native-metronome-module";
 
 // ...
 
-const result = await MetronomeModule.multiply(3, 7);
 ```
 
 ## Contributing
