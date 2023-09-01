@@ -1,6 +1,6 @@
 {
   "name": "react-native-metronome-module",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Cross-platform metronome module for iOS and Android",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
