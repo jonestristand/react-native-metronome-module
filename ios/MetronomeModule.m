@@ -15,4 +15,9 @@ RCT_EXTERN_METHOD(getShouldPauseOnLostFocus:(RCTPromiseResolveBlock)resolve reje
 RCT_EXTERN_METHOD(isPlaying:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(isPaused:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 
++ (BOOL)requiresMainQueueSetup
+{
+  return NO;
+}
+
 @end
