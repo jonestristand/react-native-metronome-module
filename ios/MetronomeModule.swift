@@ -41,7 +41,7 @@ class MetronomeModule: NSObject, RCTInvalidating {
     guard let url = Bundle.main.url(forResource: "metronome", withExtension: "wav") else { print("metronome.wav file not found"); return; };
 
     do {
-      try AVAudioSession.sharedInstance().setCategory(AVAudioSessionCategoryPlayback, mode: AVAudioSessionModeDefault);
+      try AVAudioSession.sharedInstance().setCategory(AVAudioSession.Category.playback, mode: AVAudioSession.Mode.default);
       try AVAudioSession.sharedInstance().setActive(true);
 
       self.player = try AVAudioPlayer(contentsOf: url, fileTypeHint: AVFileType.wav.rawValue);

@@ -18,11 +18,11 @@ def safeExtGet(prop, fallback) {
 }
 
 android {
-    compileSdkVersion safeExtGet('MetronomeModule_compileSdkVersion', 29)
-    buildToolsVersion safeExtGet('MetronomeModule_buildToolsVersion', '29.0.2')
+    compileSdkVersion safeExtGet('MetronomeModule_compileSdkVersion', 33)
+    buildToolsVersion safeExtGet('MetronomeModule_buildToolsVersion', '33.0.0')
     defaultConfig {
-        minSdkVersion safeExtGet('MetronomeModule_minSdkVersion', 16)
-        targetSdkVersion safeExtGet('MetronomeModule_targetSdkVersion', 29)
+        minSdkVersion safeExtGet('MetronomeModule_minSdkVersion', 21)
+        targetSdkVersion safeExtGet('MetronomeModule_targetSdkVersion', 33)
         versionCode 1
         versionName "1.0"
 

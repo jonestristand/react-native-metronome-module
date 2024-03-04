@@ -8,6 +8,10 @@ Cross-platform metronome module for iOS and Android
 npm install react-native-metronome-module
 ```
 
+**You must include a metronome.wav file in the following locations for this module to work:**
+- android/app/src/main/res/raw
+- ios (and add the file to the project in XCode)
+
 ## Usage
 
 ```js
