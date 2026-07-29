@@ -61,8 +61,6 @@ jobs:
         # The frameworks build additionally validates that the Swift class is
         # public enough to appear in the generated -Swift.h umbrella header.
         frameworks: ['', 'static']
-    env:
-      USE_FRAMEWORKS: ${{ matrix.frameworks }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -76,7 +74,13 @@ jobs:
         run: npm install --no-audit --no-fund
         working-directory: example
       - name: Install pods (runs codegen)
-        run: pod install
+        # USE_FRAMEWORKS must be entirely unset (not empty) for the default
+        # static-library build — the Podfile checks `linkage != nil`
+        run: |
+          if [ -n "${{ matrix.frameworks }}" ]; then
+            export USE_FRAMEWORKS='${{ matrix.frameworks }}'
+          fi
+          pod install
         working-directory: example/ios
       - name: Build iOS example (new architecture)
         run: |
