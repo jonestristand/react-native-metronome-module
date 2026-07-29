@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main, turbomodule-new-arch]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install library dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typescript
+      - name: Lint
+        run: npm run lint
+
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install library dependencies
+        run: npm ci
+      - name: Install example dependencies
+        run: npm install --no-audit --no-fund
+        working-directory: example
+      - name: Build Android example (new architecture)
+        run: ./gradlew assembleDebug
+        working-directory: example/android
+
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # '' = static libraries (default); 'static' = use_frameworks! :linkage => :static
+        # The frameworks build additionally validates that the Swift class is
+        # public enough to appear in the generated -Swift.h umbrella header.
+        frameworks: ['', 'static']
+    env:
+      USE_FRAMEWORKS: ${{ matrix.frameworks }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install library dependencies
+        run: npm ci
+      - name: Install example dependencies
+        run: npm install --no-audit --no-fund
+        working-directory: example
+      - name: Install pods (runs codegen)
+        run: pod install
+        working-directory: example/ios
+      - name: Build iOS example (new architecture)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -workspace MetronomeExample.xcworkspace \
+            -scheme MetronomeExample \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify --quiet
+        working-directory: example/ios
