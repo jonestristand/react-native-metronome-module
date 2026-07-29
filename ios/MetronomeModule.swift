@@ -7,120 +7,153 @@
 
 import Foundation
 import AVFoundation
+import UIKit
 import React
 
 @objc(MetronomeModule)
-class MetronomeModule: NSObject, RCTInvalidating {
+public class MetronomeModule: NSObject, RCTInvalidating {
 
-  var bpm: Int = 60 ;
-  var shouldPauseOnLostFocus: Bool = true;
+  private let queue = DispatchQueue(label: "com.reactnativemetronomemodule");
 
-  var timer: Timer?;
-  var player: AVAudioPlayer?;
+  private var bpm: Int = 60;
+  private var shouldPauseOnLostFocus: Bool = true;
 
-  enum metronomeState {
-    case PLAYING
-    case PAUSED
-    case STOPPED
+  private var timer: DispatchSourceTimer?;
+  private var player: AVAudioPlayer?;
+
+  private enum State {
+    case playing, paused, stopped
   }
-  var currentState: metronomeState = metronomeState.STOPPED;
+  private var currentState: State = .stopped;
 
-  /** === Public constructor =============================================== */
-/*  override init() {
+  /** === Public constructor ================================================== */
+  public override init() {
     super.init();
-
-    self.initializeSoundPlayer();
-  }*/
-
-  /** === Private methods ================================================== */
-  private func getIntervalMS() -> Double {
-    return 60.0 / Double(self.bpm);
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(handleResignActive),
+      name: UIApplication.willResignActiveNotification, object: nil);
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(handleBecomeActive),
+      name: UIApplication.didBecomeActiveNotification, object: nil);
   }
 
-  private func initializeSoundPlayer() -> Void {
-    guard let url = Bundle.main.url(forResource: "metronome", withExtension: "wav") else { print("metronome.wav file not found"); return; };
+  /** === Private properties ================================================== */
+  private var interval: DispatchTimeInterval {
+    .milliseconds(60_000 / bpm) // bpm is clamped >= 1 in setBPM
+  }
+
+  /** === Private methods ===================================================== */
+  private func initializeSoundPlayer() {
+    guard let url = Bundle.main.url(forResource: "metronome", withExtension: "wav") else {
+      print("metronome.wav file not found"); return
+    }
 
     do {
-      try AVAudioSession.sharedInstance().setCategory(AVAudioSession.Category.playback, mode: AVAudioSession.Mode.default);
+      try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default);
       try AVAudioSession.sharedInstance().setActive(true);
 
       self.player = try AVAudioPlayer(contentsOf: url, fileTypeHint: AVFileType.wav.rawValue);
+      self.player?.prepareToPlay();
     } catch let error {
       print(error.localizedDescription)
     }
   }
 
-  @objc private func tok()
-  {
-    self.player?.play();
+  private func startTimerLocked() {
+    let t = DispatchSource.makeTimerSource(queue: queue)
+    t.schedule(deadline: .now(), repeating: interval)
+    t.setEventHandler { [weak self] in
+      self?.player?.currentTime = 0
+      self?.player?.play()
+    }
+    t.resume()
+    timer = t
   }
 
-  /** === React Methods ==================================================== */
-  @objc
-  func start() -> Void {
-    if (self.currentState != metronomeState.PLAYING) {
+  private func stopTimerLocked() {
+    timer?.cancel()
+    timer = nil
+  }
 
-      // Lazy initialization of sound player
-      if (self.timer == nil) {
-        initializeSoundPlayer();
+  /** === App lifecycle (posted on main; hop to queue) ===================== */
+  @objc private func handleResignActive() {
+    queue.async {
+      if self.currentState == .playing && self.shouldPauseOnLostFocus {
+        self.stopTimerLocked()
+        self.currentState = .paused
       }
-
-      // Start Timer on another thread
-      DispatchQueue.global(qos:.userInteractive).async(execute: {
-        self.timer = Timer.scheduledTimer(timeInterval: self.getIntervalMS(), target: self, selector: #selector(self.tok), userInfo: nil, repeats: true);
-        RunLoop.current.run();
-      });
-
-      // Update the state of the metronome
-      self.currentState = metronomeState.PLAYING;
     }
   }
 
-  @objc
-  func stop() -> Void {
-    if (self.currentState == metronomeState.PLAYING) {
-      self.timer?.invalidate();
-      self.timer = nil;
-      self.currentState = metronomeState.STOPPED;
+  @objc private func handleBecomeActive() {
+    queue.async {
+      if self.currentState == .paused {
+        self.startTimerLocked()
+        self.currentState = .playing
+      }
+    }
+  }
+
+  /** === React Methods ======================================================= */
+  @objc public func start() {
+    queue.async {
+      guard self.currentState != .playing else { return }
+      if self.player == nil {          // minor fix: was `timer == nil`
+        self.initializeSoundPlayer()
+      }
+      self.startTimerLocked()
+      self.currentState = .playing
+    }
+  }
+
+  @objc public func stop() {
+    queue.async {
+      // unconditional: also clears a lost-focus PAUSED state so the
+      // metronome can't auto-resume after an explicit stop
+      self.stopTimerLocked()
+      self.currentState = .stopped
     }
   }
 
   @objc(setBPM:)
-  func setBPM(_ newBPM: Int) -> Void {
-    self.bpm = newBPM;
-
-    if (self.currentState == metronomeState.PLAYING) {
-      self.stop();
-      self.start();
+  public func setBPM(_ newBPM: Double) {
+    queue.async {
+      self.bpm = max(1, Int(newBPM.rounded()))
+      // reschedule in place
+      self.timer?.schedule(deadline: .now(), repeating: self.interval)
     }
   }
 
-  @objc(getBPM:rejecter:)
-  func getBPM(_ resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) -> Void {
-    resolve(self.bpm);
+  @objc(getBPM:reject:)
+  public func getBPM(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    queue.sync { resolve(self.bpm) }
   }
 
   @objc(setShouldPauseOnLostFocus:)
-  func setShouldPauseOnLostFocus(_ shouldPause: Bool) -> Void {
-    self.shouldPauseOnLostFocus = shouldPause;
+  public func setShouldPauseOnLostFocus(_ shouldPause: Bool) {
+    queue.async { self.shouldPauseOnLostFocus = shouldPause }
   }
 
-  @objc(getShouldPauseOnLostFocus:rejecter:)
-  func getShouldPauseOnLostFocus(_ resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) -> Void {
-    resolve(self.shouldPauseOnLostFocus);
+  @objc(getShouldPauseOnLostFocus:reject:)
+  public func getShouldPauseOnLostFocus(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    queue.sync { resolve(self.shouldPauseOnLostFocus) }
   }
 
-  @objc(isPlaying:rejecter:)
-  func isPlaying(_ resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) -> Void {
-    resolve(self.currentState == metronomeState.PLAYING);
+  @objc(isPlaying:reject:)
+  public func isPlaying(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    queue.sync { resolve(self.currentState == .playing) }
   }
 
-  @objc(isPaused:rejecter:)
-  func isPaused(_ resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) -> Void {
-    resolve(self.currentState == metronomeState.PAUSED);
+  @objc(isPaused:reject:)
+  public func isPaused(_ resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+    queue.sync { resolve(self.currentState == .paused) }
   }
 
-  func invalidate() -> Void{
-    self.stop();
+  public func invalidate() {
+    NotificationCenter.default.removeObserver(self)
+    queue.sync {
+      self.stopTimerLocked()
+      self.currentState = .stopped
+    }
   }
 }

@@ -2,8 +2,6 @@ package com.reactnativemetronomemodule;
 
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.bridge.ReactContextBaseJavaModule;
-import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Promise;
 
 import java.util.concurrent.ScheduledFuture;
@@ -13,9 +11,7 @@ import java.util.concurrent.TimeUnit;
 import android.media.SoundPool;
 import android.media.AudioAttributes;
 
-import androidx.annotation.NonNull;
-
-public class MetronomeModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
+public class MetronomeModule extends NativeMetronomeModuleSpec implements LifecycleEventListener {
 
   /** === Private members ================================================== */
   private final ReactApplicationContext reactContext;
@@ -23,22 +19,22 @@ public class MetronomeModule extends ReactContextBaseJavaModule implements Lifec
   private int bpm = 100;
   private boolean shouldPauseOnLostFocus = true;
 
-  private enum metronomeState {
-    PLAYING,
-    PAUSED,
-    STOPPED
-  }
-  private metronomeState currentState = metronomeState.STOPPED;
+  private enum State { PLAYING, PAUSED, STOPPED }
+  private State currentState = State.STOPPED;
 
   private SoundPool soundPool;
+  private int soundId = 0;
+  private boolean soundLoaded = false;
 
   private final ScheduledThreadPoolExecutor scheduledExecutor = new ScheduledThreadPoolExecutor(1);
-  private ScheduledFuture scheduledFuture;
+  private ScheduledFuture<?> scheduledFuture;
 
-  private final Runnable tok = new Runnable() {
-    @Override
-    public void run() {
-      soundPool.play(1, 1, 1, 1, 0, 1.0f);
+  // Lambda so `this` is the module (in the old anonymous class it was the Runnable)
+  private final Runnable tok = () -> {
+    synchronized (this) {
+      if (soundLoaded) {
+        soundPool.play(soundId, 1, 1, 1, 0, 1.0f);
+      }
     }
   };
 
@@ -47,109 +43,131 @@ public class MetronomeModule extends ReactContextBaseJavaModule implements Lifec
     super(context);
     this.reactContext = context;
     this.reactContext.addLifecycleEventListener(this);
-
+    this.scheduledExecutor.setRemoveOnCancelPolicy(true);
     initializeSoundPool();
   }
 
-  /** === Private methods ================================================== */
+  /** === Private helpers (call with `this` lock held) ===================== */
   private int getIntervalMS() {
-    return 60000 / bpm;
+    return 60_000 / bpm;   // bpm clamped >= 1 in setBPM
   }
 
   private void initializeSoundPool() {
-      // Use the new SoundPool builder on newer version of android
-      this.soundPool = new SoundPool.Builder()
-        .setMaxStreams(1)
-        .setAudioAttributes(new AudioAttributes.Builder()
-          .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-          .build())
-        .build();
+    soundPool = new SoundPool.Builder()
+      .setMaxStreams(1)
+      .setAudioAttributes(new AudioAttributes.Builder()
+        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+        .build())
+      .build();
 
-    int soundResourceId = this.reactContext.getResources().getIdentifier("metronome", "raw", this.reactContext.getPackageName());
-    this.soundPool.load(this.reactContext, soundResourceId, 1);
+    // Track the real sample id + readiness instead of assuming id 1
+    soundPool.setOnLoadCompleteListener((pool, sampleId, status) -> {
+      synchronized (this) {
+        if (status == 0) {
+          soundId = sampleId;
+          soundLoaded = true;
+        }
+      }
+    });
+
+    int soundResourceId = reactContext.getResources()
+      .getIdentifier("metronome", "raw", reactContext.getPackageName());
+    soundPool.load(reactContext, soundResourceId, 1);
   }
 
-  /** === Host lifecycle hooks ============================================= */
-  @Override
-  public void onHostResume() {
-    // Activity `onResume`
-    if (this.currentState == metronomeState.PAUSED)
-      start();
-  }
-  @Override
-  public void onHostPause() {
-    // Activity `onPause`
-    if (this.currentState == metronomeState.PLAYING && this.shouldPauseOnLostFocus) {
-      this.stop();
-      this.currentState = metronomeState.PAUSED;
-    }
-  }
-  @Override
-  public void onHostDestroy() {
-    // Activity `onDestroy`
-    stop();
+  private void startTimer() {
+    scheduledFuture = scheduledExecutor.scheduleAtFixedRate(
+      tok, 0, getIntervalMS(), TimeUnit.MILLISECONDS);
   }
 
-  /** === React Methods ==================================================== */
-  @ReactMethod
-  public void start() {
-    if (this.currentState != metronomeState.PLAYING) {
-      this.scheduledExecutor.setRemoveOnCancelPolicy(true);
-      this.scheduledFuture = scheduledExecutor.scheduleAtFixedRate(this.tok, 0, this.getIntervalMS(), TimeUnit.MILLISECONDS);
-
-      this.currentState = metronomeState.PLAYING;
+  private void stopTimer() {
+    if (scheduledFuture != null) {
+      scheduledFuture.cancel(false);
+      scheduledFuture = null;
     }
   }
 
-  @ReactMethod
-  public void stop() {
-    if (this.currentState == metronomeState.PLAYING) {
-      this.scheduledFuture.cancel(false);
-      this.currentState = metronomeState.STOPPED;
-    }
-  }
-
-  @ReactMethod
-  public void setBPM(int newBPM) {
-    this.bpm = newBPM;
-
-    // If currently playing, need to restart to pick up the new BPM
-    if (this.currentState == metronomeState.PLAYING) {
-      this.stop();
-      this.start();
-    }
-  }
-
-  @ReactMethod
-  public void getBPM(Promise promise) {
-    promise.resolve(this.bpm);
-  }
-
-  @ReactMethod
-  public void setShouldPauseOnLostFocus(boolean shouldPause) {
-    this.shouldPauseOnLostFocus = shouldPause;
-  }
-
-  @ReactMethod
-  public void getShouldPauseOnLostFocus(Promise promise) {
-    promise.resolve(this.shouldPauseOnLostFocus);
-  }
-
-  @ReactMethod
-  public void isPlaying(Promise promise) {
-    promise.resolve(this.currentState == metronomeState.PLAYING);
-  }
-
-  @ReactMethod
-  public void isPaused(Promise promise) {
-    promise.resolve(this.currentState == metronomeState.PAUSED);
-  }
-
-  /** === Public methods =================================================== */
-  @NonNull
+  /** === Host lifecycle hooks (UI thread) ================================= */
   @Override
-  public String getName() {
-    return "MetronomeModule";
+  public synchronized void onHostResume() {
+    if (currentState == State.PAUSED) {
+      startTimer();
+      currentState = State.PLAYING;
+    }
   }
 
+  @Override
+  public synchronized void onHostPause() {
+    if (currentState == State.PLAYING && shouldPauseOnLostFocus) {
+      stopTimer();
+      currentState = State.PAUSED;
+    }
+  }
+
+  @Override
+  public synchronized void onHostDestroy() {
+    stopTimer();
+    currentState = State.STOPPED;
+  }
+
+  /** === React Methods (NativeModules thread) ============================= */
+  @Override
+  public synchronized void start() {
+    if (currentState != State.PLAYING) {
+      startTimer();
+      currentState = State.PLAYING;
+    }
+  }
+
+  @Override
+  public synchronized void stop() {
+    // unconditional: also clears a lost-focus PAUSED state so the
+    // metronome can't auto-resume after an explicit stop
+    stopTimer();
+    currentState = State.STOPPED;
+  }
+
+  @Override
+  public synchronized void setBPM(double newBPM) {
+    bpm = Math.max(1, (int) Math.round(newBPM));   // no div-by-zero / negative
+    if (currentState == State.PLAYING) {
+      stopTimer();
+      startTimer();
+    }
+  }
+
+  @Override
+  public synchronized void getBPM(Promise promise) {
+    promise.resolve(bpm);
+  }
+
+  @Override
+  public synchronized void setShouldPauseOnLostFocus(boolean shouldPause) {
+    shouldPauseOnLostFocus = shouldPause;
+  }
+
+  @Override
+  public synchronized void getShouldPauseOnLostFocus(Promise promise) {
+    promise.resolve(shouldPauseOnLostFocus);
+  }
+
+  @Override
+  public synchronized void isPlaying(Promise promise) {
+    promise.resolve(currentState == State.PLAYING);
+  }
+
+  @Override
+  public synchronized void isPaused(Promise promise) {
+    promise.resolve(currentState == State.PAUSED);
+  }
+
+  /** === Teardown ========================================================= */
+  @Override
+  public synchronized void invalidate() {
+    stopTimer();
+    scheduledExecutor.shutdownNow();
+    soundPool.release();
+    reactContext.removeLifecycleEventListener(this);
+    super.invalidate();
+  }
 }

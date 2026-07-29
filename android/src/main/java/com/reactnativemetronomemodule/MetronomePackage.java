@@ -1,28 +1,40 @@
-package com.reactnativemetronomemodule; // replace your-app-name with your app’s name
-import com.facebook.react.ReactPackage;
+package com.reactnativemetronomemodule;
+
+import com.facebook.react.BaseReactPackage;
 import com.facebook.react.bridge.NativeModule;
 import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.uimanager.ViewManager;
+import com.facebook.react.module.model.ReactModuleInfo;
+import com.facebook.react.module.model.ReactModuleInfoProvider;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
-public class MetronomePackage implements ReactPackage {
+public class MetronomePackage extends BaseReactPackage {
 
   @Override
-  public List<ViewManager> createViewManagers(ReactApplicationContext reactContext) {
-    return Collections.emptyList();
+  public NativeModule getModule(String name, ReactApplicationContext reactContext) {
+    if (name.equals(MetronomeModule.NAME)) {
+      return new MetronomeModule(reactContext);
+    } else {
+      return null;
+    }
   }
 
   @Override
-  public List<NativeModule> createNativeModules(
-      ReactApplicationContext reactContext) {
-    List<NativeModule> modules = new ArrayList<>();
-
-    modules.add(new MetronomeModule(reactContext));
-
-    return modules;
+  public ReactModuleInfoProvider getReactModuleInfoProvider() {
+    return () -> {
+      Map<String, ReactModuleInfo> moduleInfos = new HashMap<>();
+      moduleInfos.put(
+          MetronomeModule.NAME,
+          new ReactModuleInfo(
+              MetronomeModule.NAME,
+              MetronomeModule.NAME,
+              false, // canOverrideExistingModule
+              false, // needsEagerInit
+              false, // isCxxModule
+              true // isTurboModule
+          ));
+      return moduleInfos;
+    };
   }
-
 }
