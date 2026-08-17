@@ -8,7 +8,7 @@
 #import <react_native_metronome_module/react_native_metronome_module-Swift.h>
 #endif
 
-@interface MetronomeModule (SpecConformance) <NativeMetronomeModuleSpec>
+@interface MetronomeModule (TurboModuleProvider) <NativeMetronomeModuleSpec>
 @end
 
 @implementation MetronomeModule (TurboModuleProvider)
