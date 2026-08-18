@@ -1,4 +1,4 @@
-import { NativeModules } from 'react-native';
+import NativeMetronomeModule from './NativeMetronomeModule';
 
 type MetronomeModuleType = {
   start: () => void;
@@ -8,12 +8,10 @@ type MetronomeModuleType = {
   getBPM: () => Promise<number>;
 
   setShouldPauseOnLostFocus: (shouldPause: boolean) => void;
-  getShouldPauseOnLostFocus: () => Promise<number>;
+  getShouldPauseOnLostFocus: () => Promise<boolean>;
 
   isPlaying: () => Promise<boolean>;
   isPaused: () => Promise<boolean>;
 };
 
-const { MetronomeModule } = NativeModules;
-
-export default MetronomeModule as MetronomeModuleType;
+export default NativeMetronomeModule as MetronomeModuleType;

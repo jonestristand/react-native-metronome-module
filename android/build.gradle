@@ -3,30 +3,30 @@ buildscript {
         repositories {
             google()
             mavenCentral()
-            maven { url 'https://jitpack.io' }
         }
 
         dependencies {
-            classpath 'com.android.tools.build:gradle:3.5.3'
+            classpath 'com.android.tools.build:gradle:8.7.2'
         }
     }
 }
 
 apply plugin: 'com.android.library'
+apply plugin: 'com.facebook.react'
 
 def safeExtGet(prop, fallback) {
     rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
 }
 
 android {
-    compileSdkVersion safeExtGet('MetronomeModule_compileSdkVersion', 33)
-    buildToolsVersion safeExtGet('MetronomeModule_buildToolsVersion', '33.0.0')
+    namespace "com.reactnativemetronomemodule"
+    compileSdkVersion safeExtGet('compileSdkVersion', 36)
+    buildToolsVersion safeExtGet('buildToolsVersion', '36.0.0')
     defaultConfig {
-        minSdkVersion safeExtGet('MetronomeModule_minSdkVersion', 21)
-        targetSdkVersion safeExtGet('MetronomeModule_targetSdkVersion', 33)
+        minSdkVersion safeExtGet('minSdkVersion', 24)
+        targetSdkVersion safeExtGet('targetSdkVersion', 36)
         versionCode 1
         versionName "1.0"
-
     }
 
     buildTypes {
@@ -38,23 +38,16 @@ android {
         disable 'GradleCompatible'
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 }
 
 repositories {
-    mavenLocal()
-    maven {
-        // All of React Native (JS, Obj-C sources, Android binaries) is installed from npm
-        url("$rootDir/../node_modules/react-native/android")
-    }
     google()
     mavenCentral()
-    maven { url 'https://jitpack.io' }
 }
 
 dependencies {
-    //noinspection GradleDynamicVersion
-    implementation "com.facebook.react:react-native:+"  // From node_modules
+    implementation "com.facebook.react:react-android"
 }
